@@ -31,11 +31,12 @@ impl Vec2 {
         self.y.0
     }
 
-    pub fn diff(&self, other: Vec2) -> Vec2 {
-        Vec2::new(
-            other.x() - self.x(),
-            other.y() - self.y(),
-        )
+    pub fn cross_product(&self, other: Vec2) -> f32 {
+        self.x() * other.y() - self.y() * other.x()
+    }
+
+    pub fn dot_product(&self, other: Vec2) -> f32 {
+        self.x() * other.x() + self.y() * other.y()
     }
 }
 
@@ -61,14 +62,14 @@ impl Sub for Vec2 {
     }
 }
 
-impl Mul for Vec2 {
-    type Output = f32;
-
-    /// Cross product between two vectors
-    fn mul(self, rhs: Self) -> Self::Output {
-        self.x() * rhs.y() - self.y() * rhs.x()
-    }
-}
+// impl Mul for Vec2 {
+//     type Output = f32;
+//
+//     /// Cross product between two vectors
+//     fn mul(self, rhs: Self) -> Self::Output {
+//         self.x() * rhs.y() - self.y() * rhs.x()
+//     }
+// }
 
 impl Mul<f32> for Vec2 {
     type Output = Vec2;
@@ -87,7 +88,7 @@ impl Div<f32> for Vec2 {
     fn div(self, rhs: f32) -> Self::Output {
         Vec2 {
             x: self.x / rhs,
-            y: self.y / rhs
+            y: self.y / rhs,
         }
     }
 }
@@ -113,26 +114,60 @@ impl Segment {
 
     /// Calculate the intersection between this line segment and another one.
     /// Based on this answer on stack overflow: https://stackoverflow.com/a/565282
+    ///
+    /// Basically, there are 4 cases
+    ///
+    /// 1. The segments are collinear (r × s = 0 and (q − p) × r = 0)
+    /// If the segments are collinear, tow sub-cases could happen
+    ///
+    /// 1.1 The segments intersect and the intersection is another segment
+    /// This is checked by calculating two values
+    /// t0 = (q − p) · r / (r · r)
+    /// t1 = t0 + s · r / (r · r)
+    ///
+    /// and check if they intersect with the interval [0,1]. If true, the segments are collinear and intersecting
+    ///
+    /// 1.2 The segments don't intersect
+    /// If the check from 1.1 is false, the segments are collinear but don't intersect
+    ///
+    /// 2. The segments are parallel but don't intersect (r × s = 0 and (q − p) × r ≠ 0)
+    ///
+    /// 3. The segments are intersecting (r × s ≠ 0 and 0 ≤ t ≤ 1 and 0 ≤ u ≤ 1)
+    /// t = (q − p) × s / (r × s)
+    /// u = (p − q) × r / (s × r)
+    ///
+    /// Then the intersection is p + t r = q + u s
+    ///
+    /// 4. The segments are neither collinear nor parallel. They just dont intersect
     fn calculate_intersection(&self, other: Segment) -> IntersectionStatus {
         let p = self.a;
         let q = other.a;
         let r = self.b - self.a;
         let s = other.b - other.a;
 
-        let r_cross_s = r * s;
+        let r_cross_s = r.cross_product(s);
         let q_minus_p = q - p;
-        let q_minus_p_cross_r = q_minus_p * r;
+        let q_minus_p_cross_r = q_minus_p.cross_product(r);
 
         if r_cross_s == 0.0 && q_minus_p_cross_r == 0.0 {
-            return Collinear;
+            let t0 = q_minus_p.dot_product(r) / (r.dot_product(r));
+            let t1 = t0 + ((s.dot_product(r)) / (r.dot_product(r)));
+
+            let interval = 0.0..=1.0;
+
+            if interval.contains(&t0) || interval.contains(&t1) || (t0 <= 0.0 && t1 >= 1.0) {
+                return CollinearIntersecting;
+            } else {
+                return CollinearNotIntersecting;
+            }
         }
 
         if r_cross_s == 0.0 && q_minus_p_cross_r != 0.0 {
             return NotIntersecting;
         }
 
-        let t = q_minus_p * (s / r_cross_s);
-        let u = q_minus_p * (r / r_cross_s);
+        let t = q_minus_p.cross_product(s / r_cross_s);
+        let u = q_minus_p.cross_product(r / r_cross_s);
 
         if r_cross_s != 0.0 && (0.0..=1.0).contains(&t) && (0.0..=1.0).contains(&u) {
             return Intersecting(p + r * t);
@@ -145,7 +180,8 @@ impl Segment {
 #[derive(PartialEq, Debug)]
 enum IntersectionStatus {
     Intersecting(Vec2),
-    Collinear,
+    CollinearIntersecting,
+    CollinearNotIntersecting,
     NotIntersecting,
 }
 
@@ -175,7 +211,7 @@ pub fn raycast(
         let mut nearest_distance = calculate_distance(origin, point);
 
         for line in &lines {
-
+            // TODO Collinear intersecting is a special case
             if let Intersecting(intersection) = origin_to_point.calculate_intersection(*line) {
                 let distance_to_intersection = calculate_distance(origin, intersection);
 
@@ -253,8 +289,28 @@ mod tests {
                 Intersecting(Vec2::new(5.0, 0.0))
             ),
             (
+                Segment::from_coords(0.0, -1.0, 5.0, 1.0),
+                Intersecting(Vec2::new(2.5, 0.0))
+            ),
+            (
                 Segment::from_coords(0.0, 0.0, 3.0, 0.0),
-                Collinear
+                CollinearIntersecting
+            ),
+            (
+                Segment::from_coords(3.0, 0.0, 0.0, 0.0),
+                CollinearIntersecting
+            ),
+            (
+                Segment::from_coords(6.0, 0.0, 10.0, 0.0),
+                CollinearNotIntersecting
+            ),
+            (
+                Segment::from_coords(10.0, 0.0, 6.0, 0.0),
+                CollinearNotIntersecting
+            ),
+            (
+                Segment::from_coords(0.0, 1.0, 5.0, 1.0),
+                NotIntersecting
             )
         ].into_iter().for_each(|(l, intersection)| assert_eq!(line.calculate_intersection(l), intersection))
     }
