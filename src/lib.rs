@@ -1,9 +1,16 @@
+mod ray_intersection;
+
 use std::collections::HashSet;
 use std::ops::{Add, Div, Mul, Sub};
 
 use ordered_float::OrderedFloat;
 
 use crate::IntersectionStatus::*;
+
+// TODO I need Ray segment intersection, not segment segment intersection
+// TODO Idea for optimization
+//  1. send a ray to the target point
+//  2. if it hits the point, send another ray from that point in the same direction. If not, dont send another ray
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Vec2 {
@@ -178,7 +185,7 @@ impl Segment {
 }
 
 #[derive(PartialEq, Debug)]
-enum IntersectionStatus {
+pub enum IntersectionStatus {
     Intersecting(Vec2),
     CollinearIntersecting,
     CollinearNotIntersecting,
