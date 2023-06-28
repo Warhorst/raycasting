@@ -1,6 +1,5 @@
-mod ray_intersection;
-
 use std::collections::HashSet;
+use std::f32::consts::PI;
 use std::ops::{Add, Div, Mul, Sub};
 
 use ordered_float::OrderedFloat;
@@ -68,15 +67,6 @@ impl Sub for Vec2 {
         }
     }
 }
-
-// impl Mul for Vec2 {
-//     type Output = f32;
-//
-//     /// Cross product between two vectors
-//     fn mul(self, rhs: Self) -> Self::Output {
-//         self.x() * rhs.y() - self.y() * rhs.x()
-//     }
-// }
 
 impl Mul<f32> for Vec2 {
     type Output = Vec2;
@@ -183,9 +173,75 @@ impl Segment {
         NotIntersecting
     }
 }
+#[derive(Copy, Clone, Debug)]
+pub struct Ray {
+    origin: Vec2,
+    direction: Vec2,
+}
+
+impl Ray {
+    fn new(
+        origin: Vec2,
+        direction: Vec2
+    ) -> Self {
+        Ray {
+            origin,
+            direction
+        }
+    }
+
+    fn calculate_intersection(&self, segment: Segment) -> IntersectionStatus {
+        let p = self.origin;
+        let q = segment.a;
+        let r = self.direction;
+        let s = segment.b - segment.a;
+
+        let r_cross_s = r.cross_product(s);
+        let q_minus_p = q - p;
+        let q_minus_p_cross_r = q_minus_p.cross_product(r);
+
+        if r_cross_s == 0.0 && q_minus_p_cross_r == 0.0 {
+            let t0 = q_minus_p.dot_product(r) / (r.dot_product(r));
+            let t1 = t0 + ((s.dot_product(r)) / (r.dot_product(r)));
+
+            let interval = 0.0..=1.0;
+
+            if interval.contains(&t0) || interval.contains(&t1) || (t0 <= 0.0 && t1 >= 1.0) {
+                return CollinearIntersecting;
+            } else {
+                return CollinearNotIntersecting;
+            }
+        }
+
+        if r_cross_s == 0.0 && q_minus_p_cross_r != 0.0 {
+            return NotIntersecting;
+        }
+
+        let t = q_minus_p.cross_product(s / r_cross_s);
+        let u = q_minus_p.cross_product(r / r_cross_s);
+
+        if r_cross_s != 0.0 && t >= 0.0 && (0.0..=1.0).contains(&u) {
+            return Intersecting(p + r * t);
+        }
+
+        NotIntersecting
+    }
+
+    fn rotate(&self, radians: f32) -> Self {
+        let rotated_direction = Vec2::new(
+            self.direction.x() * radians.cos() - self.direction.y() * radians.sin(),
+            self.direction.x() * radians.sin() + self.direction.y() * radians.cos()
+        );
+
+        Ray {
+            origin: self.origin,
+            direction: rotated_direction
+        }
+    }
+}
 
 #[derive(PartialEq, Debug)]
-pub enum IntersectionStatus {
+enum IntersectionStatus {
     Intersecting(Vec2),
     CollinearIntersecting,
     CollinearNotIntersecting,
@@ -201,35 +257,46 @@ pub struct Triangle {
 
 pub fn raycast(
     origin: (f32, f32),
-    lines: Vec<Segment>,
+    segments: Vec<Segment>,
 ) -> Vec<Triangle> {
     let origin = Vec2::new(origin.0, origin.1);
 
-    let points = lines
+    let points = segments
         .iter()
         .flat_map(Segment::points)
         .collect::<HashSet<_>>();
 
-    let mut intersection_points = vec![];
+    let mut intersection_points = Vec::with_capacity(points.len());
 
     for point in points {
-        let origin_to_point = Segment::new(origin, point);
-        let mut nearest_intersection = point;
-        let mut nearest_distance = calculate_distance(origin, point);
+        let direction = point - origin;
+        let origin_to_point = Ray::new(origin, direction);
 
-        for line in &lines {
-            // TODO Collinear intersecting is a special case
-            if let Intersecting(intersection) = origin_to_point.calculate_intersection(*line) {
-                let distance_to_intersection = calculate_distance(origin, intersection);
+        let rays = [origin_to_point, origin_to_point.rotate(0.01), origin_to_point.rotate(-0.01)];
 
-                if distance_to_intersection < nearest_distance {
-                    nearest_intersection = intersection;
-                    nearest_distance = distance_to_intersection
+        println!("Begin");
+        for ray in rays {
+            println!("Ray: {:?}", ray);
+
+            let mut nearest_intersection = None;
+            let mut nearest_distance = f32::MAX;
+
+            for segment in &segments {
+                // TODO Collinear intersecting is a special case
+                if let Intersecting(intersection) = ray.calculate_intersection(*segment) {
+                    let distance_to_intersection = calculate_distance(origin, intersection);
+
+                    if distance_to_intersection < nearest_distance {
+                        nearest_intersection = Some(intersection);
+                        nearest_distance = distance_to_intersection
+                    }
                 }
             }
-        }
 
-        intersection_points.push(nearest_intersection);
+            if let Some(intersection) = nearest_intersection {
+                intersection_points.push(intersection);
+            }
+        }
     }
 
     intersection_points.sort_by(|p1, p2| {
@@ -256,6 +323,53 @@ pub fn raycast(
     triangles
 }
 
+pub fn raycast_only_points(
+    origin: (f32, f32),
+    segments: Vec<Segment>,
+) -> Vec<(f32, f32)> {
+    let origin = Vec2::new(origin.0, origin.1);
+
+    let points = segments
+        .iter()
+        .flat_map(Segment::points)
+        .collect::<HashSet<_>>();
+
+    let mut intersection_points = Vec::with_capacity(points.len());
+
+    for point in points {
+        let direction = point - origin;
+        let origin_to_point = Ray::new(origin, direction);
+
+        let rays = [origin_to_point, origin_to_point.rotate(0.01), origin_to_point.rotate(-0.01)];
+
+        println!("Begin");
+        for ray in rays {
+            println!("Ray: {:?}", ray);
+
+            let mut nearest_intersection = None;
+            let mut nearest_distance = f32::MAX;
+
+            for segment in &segments {
+                // TODO Collinear intersecting is a special case
+                if let Intersecting(intersection) = ray.calculate_intersection(*segment) {
+                    let distance_to_intersection = calculate_distance(origin, intersection);
+
+                    if distance_to_intersection < nearest_distance {
+                        nearest_intersection = Some(intersection);
+                        nearest_distance = distance_to_intersection
+                    }
+                }
+            }
+
+            if let Some(intersection) = nearest_intersection {
+                intersection_points.push(intersection);
+            }
+        }
+    }
+
+    intersection_points.into_iter().map(|vec2| (vec2.x(), vec2.y())).collect()
+}
+
 fn calculate_distance(
     p1: Vec2,
     p2: Vec2,
@@ -275,11 +389,11 @@ fn calculate_angle(
 
 #[cfg(test)]
 mod tests {
-    use crate::{Segment, Vec2};
+    use crate::{Ray, Segment, Vec2};
     use crate::IntersectionStatus::*;
 
     #[test]
-    fn calculate_intersection_works() {
+    fn segment_segment_intersection_works() {
         let line = Segment::from_coords(0.0, 0.0, 5.0, 0.0);
 
         [
@@ -320,5 +434,44 @@ mod tests {
                 NotIntersecting
             )
         ].into_iter().for_each(|(l, intersection)| assert_eq!(line.calculate_intersection(l), intersection))
+    }
+
+    #[test]
+    fn ray_segment_intersection_works() {
+        let ray = Ray {
+            origin: Vec2::new(0.0, 0.0),
+            direction: Vec2::new(5.0, 0.0),
+        };
+
+        [
+            (
+                Segment::from_coords(7.0, 3.0, 7.0, -3.0),
+                Intersecting(Vec2::new(7.0, 0.0))
+            ),
+            (
+                Segment::from_coords(7000.0, 3.0, 7000.0, -3.0),
+                Intersecting(Vec2::new(7000.0, 0.0))
+            ),
+            (
+                Segment::from_coords(-1.0, 3.0, -1.0, -3.0),
+                NotIntersecting
+            ),
+            (
+                Segment::from_coords(0.0, 3.0, -3.0, 0.0),
+                NotIntersecting
+            ),
+            (
+                Segment::from_coords(0.0, 3.0, 5.0, 3.0),
+                NotIntersecting
+            ),
+            (
+                Segment::from_coords(-5.0, 0.0, -3.0, 0.0),
+                CollinearNotIntersecting
+            ),
+            (
+                Segment::from_coords(0.0, 0.0, 3.0, 0.0),
+                CollinearIntersecting
+            )
+        ].into_iter().for_each(|(segment, intersection)| assert_eq!(ray.calculate_intersection(segment), intersection))
     }
 }
