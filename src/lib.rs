@@ -1,8 +1,4 @@
-use std::collections::HashSet;
-use std::f32::consts::PI;
 use std::ops::{Add, Div, Mul, Sub};
-
-use ordered_float::OrderedFloat;
 
 use crate::IntersectionStatus::*;
 
@@ -11,79 +7,71 @@ use crate::IntersectionStatus::*;
 //  1. send a ray to the target point
 //  2. if it hits the point, send another ray from that point in the same direction. If not, dont send another ray
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-pub struct Vec2 {
-    x: OrderedFloat<f32>,
-    y: OrderedFloat<f32>,
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct Vector {
+    pub x: f32,
+    pub y: f32,
 }
 
-impl Vec2 {
+impl Vector {
     pub fn new(x: f32, y: f32) -> Self {
         Self {
-            x: OrderedFloat::from(x),
-            y: OrderedFloat::from(y),
+            x,
+            y,
         }
     }
 
     pub fn tuple(&self) -> (f32, f32) {
-        (self.x.0, self.y.0)
+        (self.x, self.y)
     }
 
-    pub fn x(&self) -> f32 {
-        self.x.0
+    pub fn cross_product(&self, other: Vector) -> f32 {
+        self.x * other.y - self.y * other.x
     }
 
-    pub fn y(&self) -> f32 {
-        self.y.0
-    }
-
-    pub fn cross_product(&self, other: Vec2) -> f32 {
-        self.x() * other.y() - self.y() * other.x()
-    }
-
-    pub fn dot_product(&self, other: Vec2) -> f32 {
-        self.x() * other.x() + self.y() * other.y()
+    pub fn dot_product(&self, other: Vector) -> f32 {
+        self.x * other.x + self.y * other.y
     }
 }
 
-impl Add for Vec2 {
-    type Output = Vec2;
+impl Add for Vector {
+    type Output = Vector;
 
     fn add(self, rhs: Self) -> Self::Output {
-        Vec2 {
+        Vector {
             x: self.x + rhs.x,
             y: self.y + rhs.y,
         }
     }
 }
 
-impl Sub for Vec2 {
-    type Output = Vec2;
+impl Sub for Vector {
+    type Output = Vector;
 
     fn sub(self, rhs: Self) -> Self::Output {
-        Vec2 {
+        Vector {
             x: self.x - rhs.x,
             y: self.y - rhs.y,
         }
     }
 }
 
-impl Mul<f32> for Vec2 {
-    type Output = Vec2;
+impl Mul<f32> for Vector {
+    type Output = Vector;
 
     fn mul(self, rhs: f32) -> Self::Output {
-        Vec2 {
+        Vector {
             x: self.x * rhs,
             y: self.y * rhs,
         }
     }
 }
 
-impl Div<f32> for Vec2 {
-    type Output = Vec2;
+impl Div<f32> for Vector {
+    type Output = Vector;
 
     fn div(self, rhs: f32) -> Self::Output {
-        Vec2 {
+        Vector {
             x: self.x / rhs,
             y: self.y / rhs,
         }
@@ -92,20 +80,20 @@ impl Div<f32> for Vec2 {
 
 #[derive(Copy, Clone)]
 pub struct Segment {
-    a: Vec2,
-    b: Vec2,
+    a: Vector,
+    b: Vector,
 }
 
 impl Segment {
-    pub fn new(a: Vec2, b: Vec2) -> Self {
+    pub fn new(a: Vector, b: Vector) -> Self {
         Self { a, b }
     }
 
     pub fn from_coords(x0: f32, y0: f32, x1: f32, y1: f32) -> Self {
-        Self::new(Vec2::new(x0, y0), Vec2::new(x1, y1))
+        Self::new(Vector::new(x0, y0), Vector::new(x1, y1))
     }
 
-    fn points(&self) -> [Vec2; 2] {
+    fn points(&self) -> [Vector; 2] {
         [self.a, self.b]
     }
 
@@ -175,14 +163,14 @@ impl Segment {
 }
 #[derive(Copy, Clone, Debug)]
 pub struct Ray {
-    origin: Vec2,
-    direction: Vec2,
+    origin: Vector,
+    direction: Vector,
 }
 
 impl Ray {
     fn new(
-        origin: Vec2,
-        direction: Vec2
+        origin: Vector,
+        direction: Vector
     ) -> Self {
         Ray {
             origin,
@@ -228,9 +216,9 @@ impl Ray {
     }
 
     fn rotate(&self, radians: f32) -> Self {
-        let rotated_direction = Vec2::new(
-            self.direction.x() * radians.cos() - self.direction.y() * radians.sin(),
-            self.direction.x() * radians.sin() + self.direction.y() * radians.cos()
+        let rotated_direction = Vector::new(
+            self.direction.x * radians.cos() - self.direction.y * radians.sin(),
+            self.direction.x * radians.sin() + self.direction.y * radians.cos()
         );
 
         Ray {
@@ -242,7 +230,7 @@ impl Ray {
 
 #[derive(PartialEq, Debug)]
 enum IntersectionStatus {
-    Intersecting(Vec2),
+    Intersecting(Vector),
     CollinearIntersecting,
     CollinearNotIntersecting,
     NotIntersecting,
@@ -256,54 +244,10 @@ pub struct Triangle {
 }
 
 pub fn raycast(
-    origin: (f32, f32),
+    origin: Vector,
     segments: Vec<Segment>,
 ) -> Vec<Triangle> {
-    let origin = Vec2::new(origin.0, origin.1);
-
-    let points = segments
-        .iter()
-        .flat_map(Segment::points)
-        .collect::<HashSet<_>>();
-
-    let mut intersection_points = Vec::with_capacity(points.len());
-
-    for point in points {
-        let direction = point - origin;
-        let origin_to_point = Ray::new(origin, direction);
-
-        let rays = [origin_to_point, origin_to_point.rotate(0.01), origin_to_point.rotate(-0.01)];
-
-        println!("Begin");
-        for ray in rays {
-            println!("Ray: {:?}", ray);
-
-            let mut nearest_intersection = None;
-            let mut nearest_distance = f32::MAX;
-
-            for segment in &segments {
-                // TODO Collinear intersecting is a special case
-                if let Intersecting(intersection) = ray.calculate_intersection(*segment) {
-                    let distance_to_intersection = calculate_distance(origin, intersection);
-
-                    if distance_to_intersection < nearest_distance {
-                        nearest_intersection = Some(intersection);
-                        nearest_distance = distance_to_intersection
-                    }
-                }
-            }
-
-            if let Some(intersection) = nearest_intersection {
-                intersection_points.push(intersection);
-            }
-        }
-    }
-
-    intersection_points.sort_by(|p1, p2| {
-        let angle_0 = calculate_angle(origin, *p1);
-        let angle_1 = calculate_angle(origin, *p2);
-        angle_0.total_cmp(&angle_1)
-    });
+    let intersection_points = calculate_intersection_points(origin, segments);
 
     let mut triangles = intersection_points
         .windows(2)
@@ -323,16 +267,23 @@ pub fn raycast(
     triangles
 }
 
-pub fn raycast_only_points(
-    origin: (f32, f32),
+/// Return every intersection point of rays from origin to every point of the segments and the segments itself.
+///The intersection points are ordered by angle.
+pub fn calculate_intersection_points(
+    origin: Vector,
     segments: Vec<Segment>,
-) -> Vec<(f32, f32)> {
-    let origin = Vec2::new(origin.0, origin.1);
-
-    let points = segments
+) -> Vec<Vector> {
+    let mut points = segments
         .iter()
         .flat_map(Segment::points)
-        .collect::<HashSet<_>>();
+        .collect::<Vec<_>>();
+
+    points.sort_by(|p1, p2| {
+        let angle_0 = calculate_angle(origin, *p1);
+        let angle_1 = calculate_angle(origin, *p2);
+        angle_0.total_cmp(&angle_1)
+    });
+    points.dedup();
 
     let mut intersection_points = Vec::with_capacity(points.len());
 
@@ -340,12 +291,9 @@ pub fn raycast_only_points(
         let direction = point - origin;
         let origin_to_point = Ray::new(origin, direction);
 
-        let rays = [origin_to_point, origin_to_point.rotate(0.01), origin_to_point.rotate(-0.01)];
+        let rays = [origin_to_point.rotate(-0.01), origin_to_point, origin_to_point.rotate(0.01)];
 
-        println!("Begin");
         for ray in rays {
-            println!("Ray: {:?}", ray);
-
             let mut nearest_intersection = None;
             let mut nearest_distance = f32::MAX;
 
@@ -367,29 +315,27 @@ pub fn raycast_only_points(
         }
     }
 
-    intersection_points.into_iter().map(|vec2| (vec2.x(), vec2.y())).collect()
+    intersection_points
 }
 
 fn calculate_distance(
-    p1: Vec2,
-    p2: Vec2,
+    p1: Vector,
+    p2: Vector,
 ) -> f32 {
-    ((p2.x() - p1.x()).powi(2) + (p2.y() - p1.y()).powi(2)).sqrt()
+    ((p2.x - p1.x).powi(2) + (p2.y - p1.y).powi(2)).sqrt()
 }
 
-// TODO degree or rad? Degree for now
 fn calculate_angle(
-    p1: Vec2,
-    p2: Vec2,
+    p1: Vector,
+    p2: Vector,
 ) -> f32 {
-    let angle_rad = (p2.y() - p1.y()).atan2(p2.x() - p1.x());
+    let angle_rad = (p2.y - p1.y).atan2(p2.x - p1.x);
     angle_rad.to_degrees()
-    // angle_rad
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{Ray, Segment, Vec2};
+    use crate::{Ray, Segment, Vector};
     use crate::IntersectionStatus::*;
 
     #[test]
@@ -399,19 +345,19 @@ mod tests {
         [
             (
                 Segment::from_coords(3.0, 3.0, 3.0, -3.0),
-                Intersecting(Vec2::new(3.0, 0.0))
+                Intersecting(Vector::new(3.0, 0.0))
             ),
             (
                 Segment::from_coords(0.0, 3.0, 0.0, -3.0),
-                Intersecting(Vec2::new(0.0, 0.0))
+                Intersecting(Vector::new(0.0, 0.0))
             ),
             (
                 Segment::from_coords(5.0, 3.0, 5.0, -3.0),
-                Intersecting(Vec2::new(5.0, 0.0))
+                Intersecting(Vector::new(5.0, 0.0))
             ),
             (
                 Segment::from_coords(0.0, -1.0, 5.0, 1.0),
-                Intersecting(Vec2::new(2.5, 0.0))
+                Intersecting(Vector::new(2.5, 0.0))
             ),
             (
                 Segment::from_coords(0.0, 0.0, 3.0, 0.0),
@@ -439,18 +385,18 @@ mod tests {
     #[test]
     fn ray_segment_intersection_works() {
         let ray = Ray {
-            origin: Vec2::new(0.0, 0.0),
-            direction: Vec2::new(5.0, 0.0),
+            origin: Vector::new(0.0, 0.0),
+            direction: Vector::new(5.0, 0.0),
         };
 
         [
             (
                 Segment::from_coords(7.0, 3.0, 7.0, -3.0),
-                Intersecting(Vec2::new(7.0, 0.0))
+                Intersecting(Vector::new(7.0, 0.0))
             ),
             (
                 Segment::from_coords(7000.0, 3.0, 7000.0, -3.0),
-                Intersecting(Vec2::new(7000.0, 0.0))
+                Intersecting(Vector::new(7000.0, 0.0))
             ),
             (
                 Segment::from_coords(-1.0, 3.0, -1.0, -3.0),
