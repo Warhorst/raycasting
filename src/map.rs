@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use pad::{Position, p};
 use rand::{Rng, thread_rng};
 use TileType::*;
-use crate::raycasting::{Segment, Vector};
+use crate::raycasting::Segment;
 
 pub const TILE_SIZE: f32 = 32.0;
 pub const MAP_WIDTH: usize = 30;
@@ -31,10 +31,10 @@ impl Tile {
         let diff = TILE_SIZE / 2.0;
 
         [
-            Segment::new(Vector::new(x - diff, y + diff), Vector::new(x + diff, y + diff)),
-            Segment::new(Vector::new(x + diff, y + diff), Vector::new(x + diff, y - diff)),
-            Segment::new(Vector::new(x + diff, y - diff), Vector::new(x - diff, y - diff)),
-            Segment::new(Vector::new(x - diff, y - diff), Vector::new(x - diff, y + diff)),
+            Segment::new(Vec2::new(x - diff, y + diff), Vec2::new(x + diff, y + diff)),
+            Segment::new(Vec2::new(x + diff, y + diff), Vec2::new(x + diff, y - diff)),
+            Segment::new(Vec2::new(x + diff, y - diff), Vec2::new(x - diff, y - diff)),
+            Segment::new(Vec2::new(x - diff, y - diff), Vec2::new(x - diff, y + diff)),
         ]
     }
 }

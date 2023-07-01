@@ -3,7 +3,7 @@ use bevy::render::mesh::{Indices, PrimitiveTopology};
 use bevy::sprite::MaterialMesh2dBundle;
 use crate::map::{MAP_HEIGHT, MAP_WIDTH, Tile, TILE_SIZE, TileType};
 use crate::mouse_cursor::CursorCoordinates;
-use crate::raycasting::{raycast, Segment, Triangle, Vector};
+use crate::raycasting::{raycast, Segment, Triangle};
 
 pub struct LineOfSightPlugin;
 
@@ -53,24 +53,24 @@ fn update_los(
 
     lines.extend([
         Segment::new(
-            Vector::new(0.0, 0.0),
-            Vector::new(MAP_WIDTH as f32 * TILE_SIZE, 0.0),
+            Vec2::new(0.0, 0.0),
+            Vec2::new(MAP_WIDTH as f32 * TILE_SIZE, 0.0),
         ),
         Segment::new(
-            Vector::new(MAP_WIDTH as f32 * TILE_SIZE, 0.0),
-            Vector::new(MAP_WIDTH as f32 * TILE_SIZE, MAP_HEIGHT as f32 * TILE_SIZE),
+            Vec2::new(MAP_WIDTH as f32 * TILE_SIZE, 0.0),
+            Vec2::new(MAP_WIDTH as f32 * TILE_SIZE, MAP_HEIGHT as f32 * TILE_SIZE),
         ),
         Segment::new(
-            Vector::new(MAP_WIDTH as f32 * TILE_SIZE, MAP_HEIGHT as f32 * TILE_SIZE),
-            Vector::new(0.0, MAP_HEIGHT as f32 * TILE_SIZE),
+            Vec2::new(MAP_WIDTH as f32 * TILE_SIZE, MAP_HEIGHT as f32 * TILE_SIZE),
+            Vec2::new(0.0, MAP_HEIGHT as f32 * TILE_SIZE),
         ),
         Segment::new(
-            Vector::new(0.0, MAP_HEIGHT as f32 * TILE_SIZE),
-            Vector::new(0.0, 0.0),
+            Vec2::new(0.0, MAP_HEIGHT as f32 * TILE_SIZE),
+            Vec2::new(0.0, 0.0),
         ),
     ]);
 
-    let origin = Vector::new(origin.0, origin.1);
+    let origin = Vec2::new(origin.0, origin.1);
     let triangles = raycast(origin, lines.clone());
     *line_of_sight = LineOfSight(triangles);
     // *intersection_points = IntersectionPoints(calculate_intersection_points(origin, lines).into_iter().map(|point| ((origin.x, origin.y), (point.x, point.y))).collect())
