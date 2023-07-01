@@ -1,6 +1,6 @@
 use std::ops::{Add, Div, Mul, Sub};
 
-use crate::IntersectionStatus::*;
+use crate::raycasting::IntersectionStatus::*;
 
 // TODO I need Ray segment intersection, not segment segment intersection
 // TODO Idea for optimization
@@ -335,8 +335,8 @@ fn calculate_angle(
 
 #[cfg(test)]
 mod tests {
-    use crate::{Ray, Segment, Vector};
-    use crate::IntersectionStatus::*;
+    use crate::raycasting::IntersectionStatus::*;
+    use crate::raycasting::{Ray, Segment, Vector};
 
     #[test]
     fn segment_segment_intersection_works() {
