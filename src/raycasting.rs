@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use crate::raycasting::IntersectionStatus::*;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct Segment {
     a: Vec2,
     b: Vec2,
@@ -85,6 +85,7 @@ impl Segment {
         NotIntersecting
     }
 }
+
 #[derive(Copy, Clone, Debug)]
 pub struct Ray {
     origin: Vec2,
@@ -94,11 +95,11 @@ pub struct Ray {
 impl Ray {
     fn new(
         origin: Vec2,
-        direction: Vec2
+        direction: Vec2,
     ) -> Self {
         Ray {
             origin,
-            direction
+            direction,
         }
     }
 
@@ -142,12 +143,12 @@ impl Ray {
     fn rotate(&self, radians: f32) -> Self {
         let rotated_direction = Vec2::new(
             self.direction.x * radians.cos() - self.direction.y * radians.sin(),
-            self.direction.x * radians.sin() + self.direction.y * radians.cos()
+            self.direction.x * radians.sin() + self.direction.y * radians.cos(),
         );
 
         Ray {
             origin: self.origin,
-            direction: rotated_direction
+            direction: rotated_direction,
         }
     }
 }
@@ -195,7 +196,10 @@ pub fn raycast(
 }
 
 /// Return every intersection point of rays from origin to every point of the segments and the segments itself.
-///The intersection points are ordered by angle.
+/// The intersection points are ordered by angle.
+///
+/// TODO: please kill me (or better: refactor)
+/// TODO: jittery. Maybe a floating point issue?
 pub fn calculate_intersection_points(
     origin: Vec2,
     segments: Vec<Segment>,
@@ -212,37 +216,71 @@ pub fn calculate_intersection_points(
     });
     points.dedup();
 
-    let mut intersection_points = Vec::with_capacity(points.len());
+    let mut intersections = Vec::with_capacity(points.len());
+    let mut extra_rays = Vec::with_capacity(points.len() * 2);
 
     for point in points {
         let direction = point - origin;
         let origin_to_point = Ray::new(origin, direction);
 
-        let rays = [origin_to_point.rotate(-0.01), origin_to_point, origin_to_point.rotate(0.01)];
+        let mut nearest_intersection = None;
+        let mut nearest_distance = f32::MAX;
+        let mut hit_segment = None;
 
-        for ray in rays {
-            let mut nearest_intersection = None;
-            let mut nearest_distance = f32::MAX;
+        for segment in &segments {
+            // TODO Collinear intersecting is a special case
+            if let Intersecting(intersection) = origin_to_point.calculate_intersection(*segment) {
+                let distance_to_intersection = calculate_distance(origin, intersection);
 
-            for segment in &segments {
-                // TODO Collinear intersecting is a special case
-                if let Intersecting(intersection) = ray.calculate_intersection(*segment) {
-                    let distance_to_intersection = calculate_distance(origin, intersection);
-
-                    if distance_to_intersection < nearest_distance {
-                        nearest_intersection = Some(intersection);
-                        nearest_distance = distance_to_intersection
-                    }
+                if distance_to_intersection < nearest_distance {
+                    nearest_intersection = Some(intersection);
+                    nearest_distance = distance_to_intersection;
+                    hit_segment = Some(*segment)
                 }
             }
+        }
 
-            if let Some(intersection) = nearest_intersection {
-                intersection_points.push(intersection);
+        if let Some(intersection) = nearest_intersection {
+            intersections.push(intersection);
+
+            if intersection == point {
+                extra_rays.push((hit_segment.unwrap(), origin_to_point.rotate(-0.01)));
+                extra_rays.push((hit_segment.unwrap(), origin_to_point.rotate(0.01)));
             }
         }
     }
 
-    intersection_points
+    for (original_segment, ray) in extra_rays {
+        let mut nearest_intersection = None;
+        let mut nearest_distance = f32::MAX;
+        let mut hit_segment = None;
+
+        for segment in &segments {
+            if let Intersecting(intersection) = ray.calculate_intersection(*segment) {
+                let distance_to_intersection = calculate_distance(origin, intersection);
+
+                if distance_to_intersection < nearest_distance {
+                    nearest_intersection = Some(intersection);
+                    nearest_distance = distance_to_intersection;
+                    hit_segment = Some(*segment)
+                }
+            }
+        }
+
+        if let Some(intersection) = nearest_intersection {
+            if hit_segment.unwrap() != original_segment {
+                intersections.push(intersection)
+            }
+        }
+    }
+
+    intersections.sort_by(|p1, p2| {
+        let angle_0 = calculate_angle(origin, *p1);
+        let angle_1 = calculate_angle(origin, *p2);
+        angle_0.total_cmp(&angle_1)
+    });
+
+    intersections
 }
 
 fn calculate_distance(
